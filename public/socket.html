@@ -1,0 +1,109 @@
+<html>
+
+<body>
+    <div id="app">
+        <h4>websocket</h4>
+        <h5>Group:
+            <span id="group">darwin</span>
+        </h5>
+        <!-- a hardoced group name -->
+        <button @click="join(group)">Join Group</button>
+        <button @click="left(group)">Left Group</button>
+        <br>
+        <input id="text" type="text" @keyup.enter="sendMessage" v-model="text" />
+        <button @click="sendMessage">Add</button>
+        <span id="out">{{state?'none':`joined ${cid}`}}</span>
+        <ul>
+            <li v-for="(m,i) in message" :key="i">
+                <span>{{messageParse(m)}}</span>
+            </li>
+        </ul>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.5.13/dist/vue.js"></script>
+    <script>
+        var app = new Vue({
+            el: '#app',
+            data: {
+                message: [],
+                text: null,
+                cid: null,
+                group: 'darwin',
+                ws: null,
+                host: 'ws://localhost:5005',
+                state: false,
+                interval: null
+            },
+            mounted: function () {
+                this.ws = new WebSocket(this.host);
+                this.ws.addEventListener('error', this.errorEvent)
+                this.ws.addEventListener('close', this.closeEvent)
+                this.ws.addEventListener('open', this.openEvent)
+                this.ws.addEventListener('message', this.onMessage)
+                this.interval = setInterval(() => {
+                    this.ws.addEventListener('pong', (data) => {
+                    })
+                }, 5 * 1000)
+            },
+            methods: {
+                messageParse(message) {
+                    try {
+                        let messageObject = JSON.parse(message)
+                        return `${messageObject.cid}: ${messageObject.msg || messageObject.type}`
+                    } catch (e) {
+                        return message
+                    }
+                },
+                errorEvent: function (e) {
+                    this.message.push('error' + e)
+                },
+                closeEvent: function (e) {
+                    this.message.push('close' + e)
+                    this.send(`${this.cid} close`, `session_close`)
+                    this.ws.close()
+                    this.ws = null
+                },
+                openEvent: function (e) {
+                    this.state = true
+                },
+                onMessage: function (ms) {
+                    if (!this.cid) {
+                        let message = JSON.parse(ms.data)
+                        this.cid = message.cid
+                    }
+                    this.message.push(ms.data)
+                },
+                send: function (msg, type = 'message_sent') {
+                    this.ws.send(JSON.stringify({ cid: this.cid, msg: msg, type }));
+                },
+                broadcast: function (msg, room) {
+                    this.ws.send(JSON.stringify({ cid: this.cid, room: room, msg: msg }))
+                },
+                join: function (room) {
+                    this.ws.send(JSON.stringify({ cid: this.cid, room, type: 'session_join' }));
+                },
+                left: function (room) {
+                    this.ws.send(JSON.stringify({ cid: this.cid, room, type: 'session_left' }));
+                },
+                sendMessage: function () {
+                    //alert(el.target.value);
+                    if (this.text) {
+                        this.broadcast(this.text, this.group);
+                        this.text = null
+                    }
+                }
+            },
+            beforeDestroy: function () {
+                this.ws.removeEventListener('error', this.errorEvent)
+                this.ws.removeEventListener('close', this.closeEvent)
+                this.ws.removeEventListener('open', this.openEvent)
+                this.ws.removeEventListener('message', this.onMessage)
+                this.message.length = 0
+                clearInterval(this.interval)
+                this.interval = null
+            }
+        })
+    </script>
+</body>
+
+</html>
